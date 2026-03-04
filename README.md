@@ -10,23 +10,44 @@ DeFi lending protocols like Aave let users borrow against crypto collateral. If 
 
 The danger is that liquidations can feed on themselves. Imagine ETH drops 30%. Thousands of positions are liquidated simultaneously. The liquidation bots sell the seized ETH to repay stablecoin debt, pushing ETH down further. That triggers more liquidations. This self-reinforcing loop is called a **liquidation cascade**, and it is what destroyed hundreds of millions of dollars in protocols like Venus and Compound during the May 2021 and November 2022 crashes.
 
-This simulator models exactly that process on a synthetic Aave V3-equivalent pool ($1.8B collateral, $762M debt, 1,000 borrower positions). You choose a price drop, hit run, and watch the cascade unfold round by round.
+This simulator models exactly that process on either a synthetic Aave V3-equivalent pool ($1.8B collateral, $762M debt, 1,000 borrower positions) or a live position pool generated from real-time Aave V3 Ethereum reserve data fetched directly from the Aave API. You choose a price drop, hit run, and watch the cascade unfold round by round.
 
 ---
 
 ## What makes it different?
 
-Most liquidation simulators stop at counting how many positions get liquidated and how much bad debt accumulates. That is useful, but it misses a deeper question: **is there enough liquidity and competitive market activity to actually execute these liquidations without the price gapping?**
+Most liquidation simulators stop at counting how many positions get liquidated and how much bad debt accumulates. That is useful, but it misses a deeper question: **as the cascade drains liquidity and drives up gas costs, does the liquidation market remain competitive?**
 
-If liquidation bots cannot profitably participate — because gas costs are too high, or because stablecoin liquidity has dried up — no one posts competitive quotes. The market gaps. This is a flash crash.
+In the Burdett-Judd equilibrium, bots decide whether to post quotes by weighing the expected profit against the cost of participation (gas). When that trade-off deteriorates — because φᵐ falls as liquidity is consumed, or because κ rises during network congestion — fewer bots post competitive quotes. In the limit, no bot posts at all. This is a flash crash: not just bad debt, but a complete breakdown of the price discovery mechanism.
 
-This simulator tracks the **theoretical flash crash probability F** at each round of the cascade, derived from the equilibrium model in Mishricky (2025). F is calibrated from three observable quantities:
+This simulator tracks **F**, the per-cycle probability that no competitive quote is posted, derived from the equilibrium in Mishricky (2025). F rises endogenously as the cascade progresses. It is calibrated from three observable quantities:
 
 - **Gas cost per liquidation** (κ in the model) — high gas makes liquidation unprofitable, bots exit
 - **Stablecoin liquidity depth as a fraction of total debt** (φᵐ) — as liquidations consume liquidity, this falls
 - **Collateral volatility** (Γ) — wider price swings widen the book but also increase execution risk
 
 As the cascade progresses, liquidity drains and F rises. The dashboard shows this transition in real time.
+
+---
+
+## Live data
+
+The dashboard can run against **live Aave V3 Ethereum data** fetched directly from the official Aave API — no API key required.
+
+When live mode is selected, `fetch_live.py` queries the Aave V3 GraphQL endpoint for current reserve parameters across all active Ethereum markets:
+
+| Parameter | Source |
+|---|---|
+| Liquidation threshold (per asset) | `supplyInfo.liquidationThreshold` |
+| Liquidation bonus (per asset) | `supplyInfo.liquidationBonus` |
+| Total supply and debt (USD) | `supplyInfo.total`, `borrowInfo.total` |
+| Available stablecoin liquidity | `borrowInfo.availableLiquidity` |
+
+From these, `fetch_live.py` generates 1,000 synthetic positions weighted by each reserve's share of total protocol debt. Health factors are drawn from a log-normal calibrated to match Aave's published risk dashboard. This means the cascade simulation runs on the actual current distribution of protocol fragility rather than a fixed historical snapshot.
+
+**Fallback behaviour:** if the API is unreachable (network timeout, endpoint change), the dashboard automatically falls back to the synthetic pool and displays a status message. The synthetic pool is independently calibrated to Aave V3 Ethereum statistics as of March 2026 (DeFiLlama, Aave app).
+
+To toggle between data sources, use the **Data Source** radio button at the top of the dashboard.
 
 ---
 
@@ -87,7 +108,8 @@ Market status thresholds calibrated to a $1.8B Aave V3-equivalent pool:
 
 ```
 defi-liquidation-sim/
-├── fetch_aave.py          # Synthetic pool data calibrated to Aave V3 Ethereum
+├── fetch_aave.py          # Synthetic pool calibrated to Aave V3 Ethereum (offline)
+├── fetch_live.py          # Live Aave V3 data via official GraphQL API (no key required)
 ├── agents.py              # BorrowerAgent class with health factor calculation
 ├── simulate.py            # Cascade loop with bad debt accounting and theory scoring
 ├── theory.py              # BurdettJuddDeFi class implementing Mishricky (2025)
@@ -104,7 +126,7 @@ defi-liquidation-sim/
 **Requirements:** Python 3.9+
 
 ```bash
-pip install dash plotly pandas numpy scipy
+pip install dash plotly pandas numpy scipy requests
 ```
 
 ### Run the dashboard
@@ -115,6 +137,8 @@ python dashboard.py
 
 Open [http://127.0.0.1:8050](http://127.0.0.1:8050) in your browser.
 
+Use the **Data Source** toggle to switch between synthetic and live Aave V3 data. Live mode fetches current reserve parameters from the Aave API; if the connection fails it falls back to synthetic automatically.
+
 ### Run the simulation directly
 
 ```bash
@@ -122,6 +146,14 @@ python simulate.py
 ```
 
 Runs five benchmark scenarios (10%–50% price drops) and prints round-by-round cascade results with theoretical scores.
+
+### Test the live data feed
+
+```bash
+python fetch_live.py
+```
+
+Fetches current Aave V3 Ethereum reserve data and prints a summary of active reserves, total protocol TVL, and a sample of the generated position pool.
 
 ### Run theory tests
 
@@ -135,6 +167,7 @@ python test_speculation.py   # Analyse speculative premium (Proposition 12)
 
 ## Dashboard features
 
+- **Data source toggle** — switch between live Aave V3 API data and synthetic offline pool
 - **4 crisis scenario presets** with one-click switching
 - **Interactive sliders** for price drop (5–60%), liquidity (1–80%), and gas cost ($20–500)
 - **10 summary statistics** including bad debt, cascade rounds, initial/final F, and market status
@@ -144,13 +177,15 @@ python test_speculation.py   # Analyse speculative premium (Proposition 12)
 
 ## Limitations and extensions
 
-The model correctly predicts the qualitative structure of cascade risk and identifies the liquidity threshold at which protocol solvency deteriorates. Full quantitative validation of F against empirical liquidation gap frequency from historical on-chain data (March 2020, November 2022) requires time-series data not yet integrated.
+The conservation law result — that bad debt and flash crash risk can decouple, with F elevated and the liquidation market near-collapse even when bad debt is minimal — is reproduced consistently across scenarios. This is the failure mode that standard risk monitors miss: a protocol can look solvent while the market mechanism that keeps it solvent is breaking down. The live data feed provides current reserve parameters, but full quantitative validation of F against empirical liquidation gap frequency requires historical time-series of on-chain liquidation events (March 2020, November 2022) which are not yet integrated.
+
+The position pool is also single-asset by construction — each simulated borrower is assigned to one reserve. Real Aave positions are often multi-collateral, which affects both health factor dynamics and the liquidation incentive calculation.
 
 Natural extensions:
-- Multi-asset collateral pools
+- Historical backtesting of F against on-chain liquidation gap events
+- Multi-collateral positions (mixed ETH/wBTC/stablecoin collateral)
 - Cross-protocol contagion (Aave ↔ Compound ↔ Morpho)
-- Endogenous gas pricing during congestion
-- Live data feed via Aave subgraph or on-chain RPC
+- Endogenous gas pricing during network congestion
 
 ---
 

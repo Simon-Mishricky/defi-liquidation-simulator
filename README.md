@@ -76,9 +76,13 @@ The condition φᵐΓ/κ > 1 is required for any quoting activity. When it fails
 
 ## Data Sources
 
-**Live mode** fetches current Aave V3 Ethereum reserve data directly from the public Aave V3 GraphQL endpoint — liquidation thresholds and bonuses, total supply and debt, and available stablecoin liquidity across all active markets. From these parameters, `fetch_live.py` generates 1,000 synthetic positions weighted by each reserve's share of total protocol debt, with health factors drawn from a calibrated log-normal distribution. This means the cascade runs on the actual current distribution of protocol fragility rather than a fixed historical snapshot.
+**Simulator tab — Live mode** fetches current Aave V3 Ethereum reserve data directly from the public Aave V3 GraphQL endpoint — liquidation thresholds and bonuses, total supply and debt, and available stablecoin liquidity across all active markets. From these parameters, `fetch_live.py` generates 1,000 synthetic positions weighted by each reserve's share of total protocol debt, with health factors drawn from a calibrated log-normal distribution. This means the cascade runs on the actual current distribution of protocol fragility rather than a fixed historical snapshot.
 
-**Synthetic mode** uses an offline pool calibrated to Aave V3 Ethereum statistics as of March 2026 (DeFiLlama, Aave app). If the live endpoint is unreachable, the dashboard falls back to synthetic mode automatically and displays a status message.
+**Simulator tab — Synthetic mode** uses an offline pool calibrated to Aave V3 Ethereum statistics as of March 2026 (DeFiLlama, Aave app). If the live endpoint is unreachable, the dashboard falls back to synthetic mode automatically and displays a status message.
+
+**Live F Monitor tab** computes F in real time from three public APIs (no keys required): ETH price from CoinGecko, gas price from Etherscan's oracle, and stablecoin liquidity depth from the Aave V3 GraphQL endpoint. Each snapshot is logged to `f_monitor_log.csv` and plotted as a time series.
+
+**FTX Backtest tab** uses hardcoded parameters reconstructed from historical sources (DeFiLlama TVL series, Dune Analytics HF distributions, Etherscan gas exports, CoinGecko ETH/USD OHLCV) for the period November 1–15, 2022. **Important:** Aave V3 did not deploy on Ethereum mainnet until January 27, 2023. In November 2022, Aave's Ethereum market was running V2. The pool parameters in the backtest are calibrated to Aave V2 conditions. The theoretical framework is protocol-version-agnostic — F depends only on (κ, φᵐ, Γ) — but the underlying pool size, utilisation, and liquidity figures reflect the V2 deployment that was live during the FTX collapse.
 
 ## Crisis Scenario Presets
 
@@ -126,12 +130,15 @@ python test_speculation.py     # Speculative premium analysis (Proposition 12)
 
 ```
 defi-liquidation-sim/
-├── dashboard.py            Interactive Plotly Dash dashboard
+├── dashboard.py            Interactive Plotly Dash dashboard (three tabs)
 ├── simulate.py             Cascade engine with endogenous bot participation feedback
 ├── theory.py               BurdettJuddDeFi class — implements Mishricky (2025) equilibrium
 ├── agents.py               BorrowerAgent with health factor and liquidation logic
 ├── fetch_aave.py           Synthetic position pool calibrated to Aave V3 Ethereum
 ├── fetch_live.py           Live data from public Aave V3 GraphQL endpoint
+├── fetch_positions_dune.py Real HF distribution from Dune Analytics (optional API key)
+├── monitor.py              Real-time F monitor — logs hourly snapshots to CSV
+├── backtest_ftx.py         FTX collapse backtest (Nov 2022, Aave V2 Ethereum)
 ├── test_theory.py          Gas and liquidity stress tests
 ├── test_distributions.py   Bid/ask distribution plots under stress scenarios
 ├── test_speculation.py     Speculative premium analysis (Proposition 12)
@@ -140,9 +147,9 @@ defi-liquidation-sim/
 
 ## Limitations and Extensions
 
-The conservation law result — that flash crash risk can be elevated even when bad debt is minimal — is reproduced consistently across scenarios. But full quantitative validation of F against empirical liquidation gap frequency requires historical time-series of on-chain liquidation events (March 2020, November 2022) which are not yet integrated. The position pool is also single-asset by construction; real Aave positions are often multi-collateral, which affects both health factor dynamics and the liquidation incentive calculation.
+The conservation law result — that flash crash risk can be elevated even when bad debt is minimal — is reproduced consistently across scenarios. The FTX backtest tab reconstructs November 2022 Aave V2 Ethereum conditions and tests whether F would have flagged risk before bad debt materialised, but the pool parameters are manually reconstructed from published sources rather than pulled programmatically from on-chain data. Full quantitative validation of F against empirical liquidation gap frequency requires historical time-series of on-chain liquidation events which are not yet integrated. The position pool is also single-asset by construction; real Aave positions are often multi-collateral, which affects both health factor dynamics and the liquidation incentive calculation. The `fetch_positions_dune.py` module can fetch real position-level health factor distributions from Dune Analytics but is not yet wired into the dashboard pipeline.
 
-Planned extensions include historical backtesting of F against on-chain liquidation gaps, multi-collateral position modelling (mixed ETH/wBTC/stablecoin collateral), cross-protocol contagion (Aave ↔ Compound ↔ Morpho), and endogenous gas pricing during network congestion.
+Planned extensions include programmatic on-chain data integration for the backtest (replacing hardcoded parameters), multi-collateral position modelling (mixed ETH/wBTC/stablecoin collateral), cross-protocol contagion (Aave ↔ Compound ↔ Morpho), and endogenous gas pricing during network congestion.
 
 ## License
 

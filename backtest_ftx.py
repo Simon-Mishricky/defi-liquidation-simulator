@@ -3,9 +3,15 @@ backtest_ftx.py — FTX Collapse Backtest (November 2022)
 =========================================================
 Mishricky (2025) — Asset Price Dispersion, Monetary Policy and Macroprudential Regulation
 
-Reconstructs Aave V3 Ethereum pool conditions on November 8, 2022 — the day
-Binance announced it would not rescue FTX — and runs the liquidation cascade
-simulator from those starting conditions.
+Reconstructs Aave V2 Ethereum pool conditions on November 8, 2022 — the day
+Binance signed a tentative letter of intent to acquire FTX (later withdrawn
+on Nov 9) — and runs the liquidation cascade simulator from those starting
+conditions.
+
+Note: Aave V3 did not deploy on Ethereum mainnet until January 27, 2023.
+In November 2022, Aave's Ethereum market was running V2. The theoretical
+framework (Mishricky 2025) is protocol-version-agnostic — F depends only
+on (κ, φᵐ, Γ) — but pool parameters are calibrated to V2 conditions.
 
 Key question: Would F have signalled ELEVATED RISK or CRITICAL *before*
 the bad debt materialised on-chain (Nov 9–12)?
@@ -13,9 +19,9 @@ the bad debt materialised on-chain (Nov 9–12)?
 Historical data sources
 -----------------------
 All figures below are reconstructed from:
-  - Aave V3 risk dashboard snapshots (archived via Wayback Machine)
+  - Aave V2 risk dashboard snapshots (archived via Wayback Machine)
   - DeFiLlama TVL data (exportable CSV, Aave Ethereum Nov 2022)
-  - Dune Analytics query #1329110 — Aave V3 ETH health factor distribution
+  - Dune Analytics query #1329110 — Aave V2 ETH health factor distribution
   - Etherscan gas oracle historical export
   - CoinGecko ETH/USD OHLCV (Nov 1–15, 2022)
 
@@ -23,9 +29,9 @@ Timeline
 --------
 Nov 2  : CoinDesk publishes Alameda balance sheet story. ETH $1,580.
 Nov 6  : Binance announces intent to sell FTT. ETH $1,545.
-Nov 8  : Binance announces no FTX rescue. ETH drops to ~$1,240 intraday.
+Nov 8  : Binance signs tentative LOI to acquire FTX. ETH drops to ~$1,240 intraday.
          *** THIS IS OUR STARTING CONDITION ***
-Nov 9  : ETH closes at $1,195. First major Aave liquidations.
+Nov 9  : Binance withdraws from FTX deal. ETH closes at $1,195. First major Aave liquidations.
 Nov 12 : ETH $1,080. Total DeFi liquidations >$300M over the week.
 
 Usage
@@ -44,7 +50,7 @@ import pandas as pd
 from theory import calibrate_from_positions, BurdettJuddDeFi
 from simulate import run_cascade
 
-# ── Historical reconstruction: Aave V3 ETH state, Nov 8 2022 ─────────────────
+# ── Historical reconstruction: Aave V2 ETH state, Nov 8 2022 ─────────────────
 #
 # These values are cross-referenced from multiple sources (see docstring above).
 # Ranges are provided where sources differ; we use the midpoint and note
@@ -53,12 +59,14 @@ from simulate import run_cascade
 FTX_BACKTEST_STATE = {
     # Date / narrative
     "date": "2022-11-08",
-    "event": "Binance announces no FTX rescue",
+    "event": "Binance signs tentative LOI to acquire FTX (withdrawn Nov 9)",
     "description": (
-        "Aave V3 Ethereum pool state reconstructed for November 8, 2022. "
+        "Aave V2 Ethereum pool state reconstructed for November 8, 2022. "
         "ETH had fallen ~20% from $1,580 (Nov 2) to $1,240 intraday. "
         "Gas spiked as panic trading hit the network. Stablecoin liquidity "
-        "was draining as borrowers rushed to deleverage."
+        "was draining as borrowers rushed to deleverage. "
+        "Note: Aave V3 did not launch on Ethereum until Jan 2023; "
+        "this reconstruction uses V2 pool conditions."
     ),
 
     # ETH price at start-of-day Nov 8 (before the announcement)
@@ -71,7 +79,7 @@ FTX_BACKTEST_STATE = {
     # Price drop from open Nov 8 to intraday low Nov 9 = ~20.5%
     "realised_price_drop_pct": 0.205,
 
-    # Aave V3 Ethereum TVL at start of Nov 8
+    # Aave V2 Ethereum TVL at start of Nov 8
     # DeFiLlama: ~$6.2B supplied, ~$2.9B borrowed
     "total_supplied_usd": 6_200_000_000,
     "total_borrowed_usd": 2_900_000_000,
@@ -79,7 +87,7 @@ FTX_BACKTEST_STATE = {
 
     # Stablecoin reserve depth (available USDC + USDT + DAI liquidity)
     # Reconstructed from Dune: available liquidity ~32% of total supply
-    # Source: Aave V3 risk dashboard archived snapshots
+    # Source: Aave V2 risk dashboard archived snapshots
     "stablecoin_depth_usd": 180_000_000,   # ~$180M available Nov 8 (draining fast)
 
     # Gas cost per liquidation on Nov 8
@@ -93,7 +101,7 @@ FTX_BACKTEST_STATE = {
     "daily_volatility": 0.055,
 
     # Health factor distribution reconstructed from Dune query #1329110
-    # (Aave V3 ETH open borrows, Nov 8 2022 snapshot)
+    # (Aave V2 ETH open borrows, Nov 8 2022 snapshot)
     # The real distribution was notably fatter-tailed than log-normal:
     # ~8% of positions had HF < 1.2 (vs ~2% in normal conditions)
     "hf_pct_below_1_2": 0.082,   # 8.2% of positions near liquidation threshold
@@ -116,7 +124,7 @@ ACTUAL_OUTCOMES = {
 
 def build_ftx_positions(n: int = 1000, seed: int = 42) -> pd.DataFrame:
     """
-    Generate a position pool calibrated to Aave V3 state on Nov 8 2022.
+    Generate a position pool calibrated to Aave V2 state on Nov 8 2022.
 
     Key differences from the normal generate_aave_positions():
     1. Fatter tail near HF = 1.0 (8.2% below HF 1.2 vs ~2% normal)
@@ -154,7 +162,7 @@ def build_ftx_positions(n: int = 1000, seed: int = 42) -> pd.DataFrame:
     hf_vals = np.concatenate([hf_bulk, hf_tail])
     rng.shuffle(hf_vals)
 
-    # Standard Aave V3 liquidation parameters (ETH collateral)
+    # Standard Aave V2 liquidation parameters (ETH collateral)
     LT = 0.825   # liquidation threshold
     LB = 0.05    # liquidation bonus
 
@@ -355,9 +363,9 @@ def build_f_timeline() -> pd.DataFrame:
 
     Data reconstructed from:
       - ETH daily close: CoinGecko
-      - Aave V3 utilisation: DeFiLlama TVL series
+      - Aave V2 utilisation: DeFiLlama TVL series
       - Gas: Etherscan export
-      - Stablecoin depth: explicit per-day estimates from archived Aave V3 risk dashboard
+      - Stablecoin depth: explicit per-day estimates from archived Aave V2 risk dashboard
         snapshots and DeFiLlama available liquidity series (USDC+USDT+DAI reserves).
         The 0.35 * free_collateral formula was badly over-estimating depth — actual
         available stablecoin liquidity in Nov 2022 was $120M–$380M, not ~$1.5B.
@@ -457,7 +465,7 @@ def main():
         df = build_f_timeline()
         pd.set_option("display.max_columns", None)
         pd.set_option("display.width", 140)
-        print("\nF Time Series — Aave V3 Ethereum, Nov 1–15 2022")
+        print("\nF Time Series — Aave V2 Ethereum, Nov 1–15 2022")
         print("=" * 80)
         print(df[["date", "eth_price_usd", "gas_usd", "phi_m", "F",
                    "market_status", "note"]].to_string(index=False))
@@ -499,13 +507,13 @@ def _save_chart(results: pd.DataFrame, summary: dict):
             c = colours.get(row["market_status"], "grey")
             ax1.bar(i, row["F"], color=c, alpha=0.85, width=0.7)
         ax1.axvline(x=7, color="black", linestyle="--", linewidth=1.5,
-                    label="Binance no-rescue tweet (Nov 8)")
+                    label="Binance tentative LOI (Nov 8)")
         ax1.axvline(x=8, color="darkred", linestyle=":", linewidth=1.2,
                     label="Peak liquidations (Nov 9)")
         ax1.set_xticks(range(len(timeline)))
         ax1.set_xticklabels(timeline["date"].str[5:], rotation=45, ha="right", fontsize=9)
         ax1.set_ylabel("F (flash-crash probability)")
-        ax1.set_title("Mishricky (2025) F Signal — Aave V3 Ethereum, Nov 1–15 2022\n"
+        ax1.set_title("Mishricky (2025) F Signal — Aave V2 Ethereum, Nov 1–15 2022\n"
                       "Green = STABLE  |  Orange = ELEVATED RISK  |  Red = CRITICAL",
                       fontsize=11)
         ax1.legend(fontsize=9)

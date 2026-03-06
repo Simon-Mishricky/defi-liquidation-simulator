@@ -43,7 +43,7 @@ app.layout = html.Div([
     dcc.Tabs(id="main-tabs", value="simulator", children=[
 
         # ── TAB 1: Original Simulator ─────────────────────────────────────
-        dcc.Tab(label="🔬 Simulator", value="simulator", children=[
+        dcc.Tab(label="Simulator", value="simulator", children=[
 
     html.Div([
         html.Label("Data Source: ", style={"fontFamily": "Arial", "fontSize": "14px", "marginRight": "10px"}),
@@ -147,7 +147,7 @@ app.layout = html.Div([
         ]),  # end Tab 1
 
         # ── TAB 2: Live F Monitor ─────────────────────────────────────────
-        dcc.Tab(label="📡 Live F Monitor", value="monitor", children=[
+        dcc.Tab(label="Live F Monitor", value="monitor", children=[
             html.Div([
                 html.Div([
                     html.H3("Real-Time Fragility Signal", style={"fontFamily": "Arial"}),
@@ -158,7 +158,7 @@ app.layout = html.Div([
                         style={"fontFamily": "Arial", "color": "#555", "fontSize": "13px"}
                     ),
                     html.Div([
-                        html.Button("🔄 Fetch Snapshot Now", id="monitor-refresh-btn",
+                        html.Button("Fetch Snapshot Now", id="monitor-refresh-btn",
                                     style={"marginRight": "15px", "padding": "8px 18px",
                                            "backgroundColor": "#2c7be5", "color": "white",
                                            "border": "none", "borderRadius": "4px",
@@ -189,19 +189,20 @@ app.layout = html.Div([
         ]),  # end Tab 2
 
         # ── TAB 3: FTX Backtest ───────────────────────────────────────────
-        dcc.Tab(label="📅 FTX Backtest", value="backtest", children=[
+        dcc.Tab(label="FTX Backtest", value="backtest", children=[
             html.Div([
                 html.Div([
                     html.H3("Empirical Validation: FTX Collapse (November 2022)",
                             style={"fontFamily": "Arial"}),
                     html.P(
-                        "Reconstructs Aave V3 Ethereum pool conditions on November 8, 2022 "
-                        "(the day Binance announced it would not rescue FTX) and runs the cascade "
-                        "simulator from those starting conditions. Tests whether F would have "
-                        "signalled ELEVATED RISK before the bad debt materialised on-chain.",
+                        "Reconstructs Aave V2 Ethereum pool conditions on November 8, 2022 "
+                        "and runs the cascade simulator from those starting conditions. "
+                        "Tests whether F would have signalled ELEVATED RISK before the "
+                        "bad debt materialised on-chain. (Aave V3 did not deploy on "
+                        "Ethereum until Jan 2023; the FTX-era market ran V2.)",
                         style={"fontFamily": "Arial", "color": "#555", "fontSize": "13px"}
                     ),
-                    html.Button("▶ Run Backtest", id="backtest-run-btn",
+                    html.Button("Run Backtest", id="backtest-run-btn",
                                 style={"padding": "8px 18px", "backgroundColor": "#e74c3c",
                                        "color": "white", "border": "none", "borderRadius": "4px",
                                        "cursor": "pointer", "fontSize": "14px",
@@ -213,9 +214,9 @@ app.layout = html.Div([
                     id="backtest-placeholder",
                     children=[
                         html.Div([
-                            html.Span("📊", style={"fontSize": "40px"}),
+                            html.Span("", style={"fontSize": "40px"}),
                             html.P(
-                                "Click ▶ Run Backtest to simulate the FTX cascade and generate all charts.",
+                                "Click Run Backtest to simulate the FTX cascade and generate all charts.",
                                 style={"fontFamily": "Arial", "fontSize": "14px",
                                        "color": "#888", "margin": "10px 0 0 0"}
                             ),

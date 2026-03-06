@@ -279,9 +279,10 @@ class BurdettJuddDeFi:
         }
 
     def summary(self):
+        F = self.flash_crash_prob
         status = (
-            "STABLE"        if self.flash_crash_prob < 0.00005 else
-            "ELEVATED RISK" if self.flash_crash_prob < 0.00050 else
+            "STABLE"        if F < 0.00005 else
+            "ELEVATED RISK" if F < 0.00050 else
             "CRITICAL"
         )
         return {

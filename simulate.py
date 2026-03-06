@@ -182,6 +182,7 @@ def run_cascade(price_drop_pct, n_positions=1000, price_impact_factor=0.00000000
             "round":                   round_num,
             "price":                   round(current_price, 4),
             "liquidations":            n_execute,
+            "liquidations_skipped":    len(skipped),
             "participation_rate":      round(participation_rate, 4),
             "liquidation_vol_usd":     round(round_liquidation_volume, 0),
             "bad_debt_usd":            round(round_bad_debt, 0),

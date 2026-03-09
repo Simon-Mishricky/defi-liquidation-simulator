@@ -1,6 +1,5 @@
 __pycache__/
 *.pyc
-*.png
 *.zip
 .DS_Store
 .env.claude/worktrees/

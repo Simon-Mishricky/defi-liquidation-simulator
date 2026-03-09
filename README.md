@@ -10,6 +10,20 @@ This simulator models exactly that process. It runs on either a **synthetic Aave
 
 What makes it different from other liquidation simulators is the integration of **F**, the flash crash probability from Mishricky (2025). F measures the per-cycle likelihood that no competitive liquidation quote is posted — that is, the probability that bots refuse to participate because the economics no longer justify it. F is not computed as a post-hoc diagnostic. It feeds back into the cascade itself.
 
+## Dashboard
+
+### Simulator
+![Simulator tab](docs/screenshot_simulator.png)
+*Interactive cascade simulator with configurable price drop, liquidity depth, and gas cost. Shows liquidations by round, θ and F evolution during the cascade, equilibrium bid/ask spread distributions, and a full stress test surface across all price drop scenarios.*
+
+### Live F Monitor
+![Live F Monitor tab](docs/screenshot_live_monitor.png)
+*Real-time fragility signal computed from live Aave V3 on-chain data. Logs P(flash crash | 24h) hourly to CSV and tracks ETH price and gas cost context.*
+
+### FTX Collapse Backtest
+![FTX Backtest tab](docs/screenshot_ftx_backtest.png)
+*Empirical validation: reconstructs Aave V2 Ethereum conditions during the November 2022 FTX collapse. F reached ELEVATED RISK (68.4%) on Nov 8 — before bad debt materialised on-chain — and peaked at CRITICAL (98.9%) on Nov 9.*
+
 ## How the Simulation Works
 
 The simulation begins with a single exogenous collateral price shock — for example, ETH drops 30%. Gas cost and initial stablecoin liquidity are fixed parameters that define the market conditions prevailing at the time of the shock. The cascade then unfolds endogenously from those starting conditions.

@@ -156,7 +156,13 @@ defi-liquidation-sim/
 ├── test_theory.py          Gas and liquidity stress tests
 ├── test_distributions.py   Bid/ask distribution plots under stress scenarios
 ├── test_speculation.py     Speculative premium analysis (Proposition 12)
-└── test_agents.py          Unit tests for BorrowerAgent
+├── test_agents.py          Unit tests for BorrowerAgent
+├── assets/
+│   └── slider.css          Dash 4 slider style overrides
+└── docs/
+    ├── screenshot_simulator.png
+    ├── screenshot_live_monitor.png
+    └── screenshot_ftx_backtest.png
 ```
 
 ## Limitations and Extensions

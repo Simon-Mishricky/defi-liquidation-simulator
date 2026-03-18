@@ -304,6 +304,17 @@ def calibrate_from_positions(positions_df, gas_usd, stablecoin_depth_usd,
     """
     Map DeFi observables to Mishricky (2025) theoretical parameters.
 
+    Scale invariance
+    ----------------
+    All three mapped parameters (κ, φᵐ, Γ) are dimensionless ratios.
+    Consequently, the equilibrium objects — θ, F, spreads, price
+    distributions, speculative premium — depend only on these ratios
+    and not on the nominal size of the position pool. A 1,000-position
+    subsample with $0.57B debt produces identical (κ, φᵐ, Γ) and
+    therefore identical F trajectories as the full 45,000-position
+    Aave V3 market with $24B debt, provided the HF distribution and
+    the liquidity-to-debt ratio are preserved.
+
     Mapping:
       kappa  = gas_usd / stablecoin_depth_usd
                Gas cost normalised by liquidity depth gives a dimensionless

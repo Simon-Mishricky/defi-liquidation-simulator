@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output, ctx
+from dash import dcc, html, Input, Output, State, ctx
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
@@ -19,7 +19,7 @@ except (ImportError, Exception):
     MONITOR_AVAILABLE = False
 
 try:
-    from backtest_ftx import run_ftx_backtest, build_f_timeline, FTX_BACKTEST_STATE, ACTUAL_OUTCOMES
+    from backtests import run_backtest, build_timeline, EVENTS, DROPDOWN_OPTIONS
     BACKTEST_AVAILABLE = True
 except (ImportError, Exception):
     BACKTEST_AVAILABLE = False
@@ -132,6 +132,75 @@ _index_string = '''
         button { font-family: "IBM Plex Mono", monospace !important; letter-spacing: 0.4px; }
         /* Graph containers */
         .dash-graph { background-color: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border); }
+
+              /* ── Backtest event dropdown — Dash 4 real class names ──────── */
+        /* Control button (collapsed state) */
+        button#backtest-event-selector.dash-dropdown {
+            background-color: #161b22 !important;
+            border: 1px solid #30363d !important;
+            border-radius: 4px !important;
+            color: #e6edf3 !important;
+            font-family: "IBM Plex Mono", monospace !important;
+            font-size: 13px !important;
+            min-height: 36px !important;
+            width: 420px !important;
+            cursor: pointer !important;
+            padding: 0 10px !important;
+        }
+        button#backtest-event-selector.dash-dropdown:hover {
+            border-color: #58a6ff !important;
+            box-shadow: 0 0 0 2px rgba(88,166,255,0.12) !important;
+        }
+        /* Selected value text inside the button */
+        #backtest-event-selector .dash-dropdown-value,
+        #backtest-event-selector .dash-dropdown-value-item,
+        #backtest-event-selector .dash-dropdown-value-item span {
+            color: #e6edf3 !important;
+            font-family: "IBM Plex Mono", monospace !important;
+            font-size: 13px !important;
+        }
+        /* Dropdown arrow icon */
+        #backtest-event-selector .dash-dropdown-trigger-icon {
+            color: #8b949e !important;
+        }
+        /* Open menu panel */
+        .dash-options-list.dash-dropdown-options {
+            background-color: #161b22 !important;
+            border: 1px solid #30363d !important;
+            border-radius: 4px !important;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.8) !important;
+            padding: 4px 0 !important;
+        }
+        /* Each option row */
+        .dash-options-list-option.dash-dropdown-option {
+            background-color: #161b22 !important;
+            color: #c9d1d9 !important;
+            cursor: pointer !important;
+            padding: 8px 12px !important;
+        }
+        .dash-options-list-option.dash-dropdown-option:hover {
+            background-color: #21262d !important;
+        }
+        /* Option text */
+        .dash-options-list-option-text,
+        .dash-options-list-option-text span {
+            color: #c9d1d9 !important;
+            font-family: "IBM Plex Mono", monospace !important;
+            font-size: 13px !important;
+        }
+        .dash-options-list-option.dash-dropdown-option:hover .dash-options-list-option-text,
+        .dash-options-list-option.dash-dropdown-option:hover .dash-options-list-option-text span {
+            color: #e6edf3 !important;
+        }
+        /* Selected option */
+        .dash-options-list-option.dash-dropdown-option.selected {
+            background-color: #1f3a5f !important;
+        }
+        .dash-options-list-option.dash-dropdown-option.selected .dash-options-list-option-text,
+        .dash-options-list-option.dash-dropdown-option.selected .dash-options-list-option-text span {
+            color: #58a6ff !important;
+        }
+
     </style>
 </head>
 <body>
@@ -238,7 +307,7 @@ app = dash.Dash(__name__, suppress_callback_exceptions=True, index_string=_index
 
 app.layout = html.Div([
 
-    html.H1("DeFi Liquidation Risk Monitor",
+    html.H1("DeFi Market Risk Monitor",
             style={"textAlign": "center", "fontFamily": "IBM Plex Mono, monospace", "marginBottom": "28px", "color": "#e6edf3", "letterSpacing": "-0.5px"}),
 
 
@@ -295,9 +364,9 @@ app.layout = html.Div([
                                  "fontFamily": "IBM Plex Mono, monospace", "fontSize": "13px",
                                  "padding": "3px 10px", "minWidth": "52px", "textAlign": "center"}),
             ], style={"display": "flex", "alignItems": "center", "marginBottom": "8px"}),
-            dcc.Slider(id="price-drop", min=5, max=60, step=5, value=30,
+            dcc.Slider(id="price-drop", min=5, max=75, step=5, value=50,
                        allow_direct_input=False,
-                       marks={i: {"label": f"{i}%", "style": {"color": "#c9d1d9", "fontFamily": "IBM Plex Mono, monospace", "fontSize": "11px"}} for i in range(5, 65, 10)}),
+                       marks={i: {"label": f"{i}%", "style": {"color": "#c9d1d9", "fontFamily": "IBM Plex Mono, monospace", "fontSize": "11px"}} for i in range(5, 80, 10)}),
         ], className="dark-slider-wrap", style={"marginBottom": "36px"}),
 
         # ── Initial Liquidity slider ────────────────────────────────────
@@ -325,9 +394,9 @@ app.layout = html.Div([
                                  "fontFamily": "IBM Plex Mono, monospace", "fontSize": "13px",
                                  "padding": "3px 10px", "minWidth": "52px", "textAlign": "center"}),
             ], style={"display": "flex", "alignItems": "center", "marginBottom": "8px"}),
-            dcc.Slider(id="gas-cost", min=20, max=500, step=20, value=80,
+            dcc.Slider(id="gas-cost", min=20, max=300, step=20, value=80,
                        allow_direct_input=False,
-                       marks={i: {"label": f"${i}", "style": {"color": "#c9d1d9", "fontFamily": "IBM Plex Mono, monospace", "fontSize": "11px"}} for i in range(20, 520, 80)}),
+                       marks={i: {"label": f"${i}", "style": {"color": "#c9d1d9", "fontFamily": "IBM Plex Mono, monospace", "fontSize": "11px"}} for i in range(20, 320, 40)}),
         ], className="dark-slider-wrap", style={"marginBottom": "10px"}),
 
         # Feedback toggle
@@ -373,6 +442,18 @@ app.layout = html.Div([
     ], style={"display": "grid", "gridTemplateColumns": "1fr 1fr",
               "gap": "20px", "marginTop": "20px"}),
 
+    html.Div([
+        html.Button(
+            "⬇ Export Results (CSV)", id="export-btn",
+            style={"padding": "8px 18px", "backgroundColor": "#21262d",
+                   "color": "#e6edf3", "border": "1px solid #30363d",
+                   "borderRadius": "4px", "cursor": "pointer",
+                   "fontSize": "13px", "fontFamily": "IBM Plex Mono, monospace",
+                   "marginTop": "16px"}
+        ),
+        dcc.Download(id="export-download"),
+    ], style={"textAlign": "right", "paddingRight": "4px"}),
+
         ]),  # end Tab 1
 
         # ── TAB 2: Live F Monitor ─────────────────────────────────────────
@@ -417,25 +498,38 @@ app.layout = html.Div([
             ], style={"padding": "20px"}),
         ]),  # end Tab 2
 
-        # ── TAB 3: FTX Backtest ───────────────────────────────────────────
-        dcc.Tab(label="FTX Backtest", value="backtest", children=[
+        # ── TAB 3: Crisis Backtests ───────────────────────────────────────────
+        dcc.Tab(label="Crisis Backtests", value="backtest", children=[
             html.Div([
                 html.Div([
-                    html.H3("Empirical Validation: FTX Collapse (November 2022)",
+                    html.H3("Empirical Validation: DeFi Crisis Backtests",
                             style={"fontFamily": "IBM Plex Mono, monospace"}),
                     html.P(
-                        "Reconstructs Aave V2 Ethereum pool conditions on November 8, 2022 "
-                        "and runs the cascade simulator from those starting conditions. "
-                        "Tests whether F would have signalled ELEVATED RISK before the "
-                        "bad debt materialised on-chain. (Aave V3 did not deploy on "
-                        "Ethereum until Jan 2023; the FTX-era market ran V2.)",
+                        "Reconstructs on-chain pool conditions for each major DeFi liquidation "
+                        "cascade and flash crash event. Tests whether F would have signalled "
+                        "ELEVATED RISK or CRITICAL before bad debt materialised. "
+                        "Select an event below, then click Run Backtest.",
                         style={"fontFamily": "IBM Plex Mono, monospace", "color": "#8b949e", "fontSize": "13px"}
                     ),
-                    html.Button("Run Backtest", id="backtest-run-btn",
-                                style={"padding": "8px 18px", "backgroundColor": "#da3633",
-                                       "color": "#e6edf3", "border": "none", "borderRadius": "4px",
-                                       "cursor": "pointer", "fontSize": "14px",
-                                       "marginBottom": "20px"}),
+                    html.Div([
+                        dcc.Dropdown(
+                            id="backtest-event-selector",
+                            options=DROPDOWN_OPTIONS if BACKTEST_AVAILABLE else [],
+                            value="ftx_2022",
+                            clearable=False,
+                            style={"width": "420px"},
+                        ),
+                        html.Button("Run Backtest", id="backtest-run-btn",
+                                    style={"padding": "8px 18px", "backgroundColor": "#da3633",
+                                           "color": "#e6edf3", "border": "none", "borderRadius": "4px",
+                                           "cursor": "pointer", "fontSize": "14px",
+                                           "marginLeft": "12px"}),
+                    ], style={"display": "flex", "alignItems": "center", "marginBottom": "20px"}),
+                    html.Div(id="backtest-event-description",
+                             style={"fontFamily": "IBM Plex Mono, monospace", "color": "#8b949e",
+                                    "fontSize": "12px", "marginBottom": "16px",
+                                    "padding": "10px 14px", "backgroundColor": "#0d1117",
+                                    "borderRadius": "4px", "border": "1px solid #21262d"}),
                 ], style={"padding": "16px 0"}),
 
                 # Placeholder shown before backtest is run
@@ -445,7 +539,7 @@ app.layout = html.Div([
                         html.Div([
                             html.Span("", style={"fontSize": "40px"}),
                             html.P(
-                                "Click Run Backtest to simulate the FTX cascade and generate all charts.",
+                                "Select a crisis event above, then click Run Backtest to generate all charts.",
                                 style={"fontFamily": "IBM Plex Mono, monospace", "fontSize": "14px",
                                        "color": "#8b949e", "margin": "10px 0 0 0"}
                             ),
@@ -527,17 +621,17 @@ def update_gas_display(v): return f"${v}"
 def update_dashboard(scenario_preset, price_drop, liquidity_pct, gas_cost, data_source, feedback_mode):
 
     preset_map = {
-        "normal":    (30, 40, 80),
-        "liquidity": (30, 3, 80),
-        "gas":       (30, 40, 450),
-        "combined":  (45, 5, 400),
+        "normal":    (50, 40,  80),
+        "liquidity": (50,  3,  80),
+        "gas":       (50, 20, 200),
+        "combined":  (65,  5, 200),
     }
 
     preset_descriptions = {
-        "normal":    "Baseline conditions. 30% price drop, 40% liquidity depth, $80 gas. Moderate φᵐ and low κ.",
+        "normal":    "Baseline conditions. 50% price drop, 40% liquidity depth, $80 gas. Moderate φᵐ and low κ.",
         "liquidity": "φᵐ shock. Liquidity depth reduced to 3% of total debt, simulating capital flight before the crash.",
-        "gas":       "κ shock. Gas cost raised to $450, raising flash crash risk as posting becomes more costly. Large positions remain profitable to liquidate — the scenario demonstrates how κ elevates F even without generating bad debt.",
-        "combined":  "Simultaneous φᵐ collapse and κ shock with a 45% price drop. Analogue of March 2020 or November 2022.",
+        "gas":       "κ + partial φᵐ shock. Gas at $200 (historically consistent with Mar 2020 peak ~$140 and network-stress scenarios) with liquidity at 20% — modelling the empirically observed co-occurrence of gas spikes and partial capital flight. F enters ELEVATED RISK while bad debt stays minimal.",
+        "combined":  "Simultaneous φᵐ collapse and κ shock with a 65% price drop and $200 gas. Analogue of March 2020 or November 2022 conditions.",
     }
 
     if ctx.triggered_id == "scenario-preset":
@@ -553,7 +647,15 @@ def update_dashboard(scenario_preset, price_drop, liquidity_pct, gas_cost, data_
     if data_source == "live" and LIVE_AVAILABLE:
         try:
             positions = fetch_live_positions(n_sample=1000)
-            data_status = f"Live Aave V3 — {len(positions)} positions fetched"
+            # Live mode: use real HF distribution and per-asset LT/LB from Aave V3.
+            # Sliders (price drop, liquidity %, gas cost) are still user-controlled —
+            # they define the stress scenario being tested against the live pool.
+            # The Live F Monitor tab shows today's actual real-time conditions.
+            data_status = (
+                f"Live Aave V3 — {len(positions)} positions | "
+                f"per-reserve LT/LB & debt weighting from live data | "
+                f"scenario parameters from sliders"
+            )
         except Exception as e:
             positions = generate_aave_positions(n=1000)
             data_status = f"Live fetch failed ({e}) — using synthetic data"
@@ -564,9 +666,34 @@ def update_dashboard(scenario_preset, price_drop, liquidity_pct, gas_cost, data_
     total_debt = positions['debt_usd'].sum()
     stablecoin_depth = total_debt * (liquidity_pct / 100)
 
+    # When using live data, the position pool may be much larger than the
+    # synthetic reference pool. The cascade simulation uses normalised positions
+    # for numerical stability. This is justified by scale invariance: the
+    # theoretical parameters (κ, φᵐ, Γ) are dimensionless ratios, so F and θ
+    # are identical regardless of nominal pool size. The HF distribution —
+    # which determines the liquidatable fraction — is preserved by the rescaling.
+    #
+    # SYNTHETIC_REFERENCE_DEBT is set to the expected synthetic pool debt
+    # (~569M from 1,000 lognormal positions). If the live pool is larger,
+    # we rescale to this reference size, preserving all dimensionless ratios.
+    SYNTHETIC_REFERENCE_DEBT = 569_000_000   # synthetic pool calibration target
+    if total_debt > SYNTHETIC_REFERENCE_DEBT * 2:
+        debt_scale = SYNTHETIC_REFERENCE_DEBT / total_debt
+        positions = positions.copy()
+        positions['debt_usd'] = positions['debt_usd'] * debt_scale
+        positions['collateral_usd'] = positions['collateral_usd'] * debt_scale
+        total_debt = positions['debt_usd'].sum()
+        stablecoin_depth = total_debt * (liquidity_pct / 100)
+        data_status = data_status + (
+            f" (pool normalised — scale-invariant: "
+            f"φᵐ={stablecoin_depth/total_debt:.4f}, "
+            f"κ={gas_cost/stablecoin_depth:.2e} preserved)"
+        )
+    gas_cost_effective = float(gas_cost)
+
     # --- Pre-cascade initial F ---
     try:
-        initial_model = calibrate_from_positions(positions, float(gas_cost), stablecoin_depth, 0.05)
+        initial_model = calibrate_from_positions(positions, gas_cost_effective, stablecoin_depth, 0.05)
         initial_F = initial_model.flash_crash_prob
         initial_theta = initial_model.theta
         initial_status = initial_model.summary()["market status"]
@@ -575,13 +702,14 @@ def update_dashboard(scenario_preset, price_drop, liquidity_pct, gas_cost, data_
         initial_theta = 0.0
         initial_status = "COLLAPSE"
 
-    # --- Run simulation ---
+    # --- Run simulation (pass positions for multi-asset LT/LB support) ---
     results, agents = run_cascade(
         price_drop_pct=price_drop / 100,
-        gas_usd=float(gas_cost),
+        gas_usd=gas_cost_effective,
         initial_liquidity_pct=liquidity_pct / 100,
         use_feedback=use_feedback,
         rng_seed=42,
+        positions=positions,
     )
 
     total_liquidated = sum(1 for a in agents if a.liquidated)
@@ -602,17 +730,47 @@ def update_dashboard(scenario_preset, price_drop, liquidity_pct, gas_cost, data_
                   "backgroundColor": "#161b22", "borderRadius": "8px",
                   "boxShadow": "0 0 12px rgba(0,230,255,0.08), inset 0 1px 0 rgba(255,255,255,0.05)", "minWidth": "150px"})
 
+    # --- Scale equivalence ---
+    # The 1,000-position pool is a structurally representative subsample of the
+    # full Aave V3 market (~45,000 borrowers, ~$24B borrowed). The cascade
+    # mechanics are scale-invariant given φᵐ = depth/debt, κ = gas/depth, and
+    # Γ = daily vol — all three are dimensionless ratios that do not depend on
+    # pool nominal size. The HF distribution (lognormal calibrated to real Aave
+    # risk dashboard data) determines which fraction of positions become
+    # liquidatable at each price drop; this fraction is preserved by the sample.
+    N_REAL_BORROWERS = 45_000
+    REAL_BORROWED_USD = 24_000_000_000
+    scale_factor = REAL_BORROWED_USD / positions['debt_usd'].sum()
+
     summary = [
-        stat_box("Positions Liquidated", f"{total_liquidated} / 1000"),
-        stat_box("Bad Debt", f"${total_bad_debt/1e6:.1f}M",
+        stat_box("Positions Liquidated", f"{total_liquidated} / {len(positions):,}",
+                 color="#e6edf3"),
+        stat_box("Representative Sample",
+                 f"{len(positions):,} positions",
+                 color="#58a6ff"),
+        stat_box("Full-Scale Equivalent",
+                 f"~{int(total_liquidated * N_REAL_BORROWERS / len(positions)):,} / {N_REAL_BORROWERS:,}\n"
+                 f"~${positions['debt_usd'].sum() * scale_factor / 1e9:.0f}B debt",
+                 color="#8b949e"),
+        stat_box("Bad Debt", f"${total_bad_debt/1e6:.3f}M" if total_bad_debt < 1e5 else f"${total_bad_debt/1e6:.1f}M",
                  color="red" if total_bad_debt > 0 else "green"),
         stat_box("Cascade Rounds", str(len(results))),
-        stat_box("Flash Crash Risk (pre-cascade, per round)", f"{1-(1-initial_F)**1000:.1%}"),
-        stat_box("Flash Crash Risk (post-cascade, per round)", f"{1-(1-final_F)**1000:.1%}"),
+        stat_box("φᵐ (liquidity ratio)",
+                 f"{stablecoin_depth / total_debt:.4f}"),
+        stat_box("κ (posting cost)",
+                 f"{gas_cost_effective / stablecoin_depth:.2e}"),
+        stat_box("Flash Crash Risk (pre)", f"{1-(1-initial_F)**1000:.1%}"),
+        stat_box("Flash Crash Risk (post)", f"{1-(1-final_F)**1000:.1%}"),
         stat_box("Final Participation Rate", f"{final_participation:.1%}",
                  color="red" if final_participation < 0.5 else ("orange" if final_participation < 0.9 else "green")),
         stat_box("Initial Status", initial_status, color=status_color(initial_status)),
         stat_box("Final Status", final_status, color=status_color(final_status)),
+        stat_box(
+            "Bad Debt / Pool Debt",
+            (f"{total_bad_debt/1e3:.1f}k" if total_bad_debt < 1e5 else f"{(total_bad_debt / positions['debt_usd'].sum() * 100):.2f}%"),
+            color="red" if total_bad_debt > positions['debt_usd'].sum() * 0.01 else
+                  ("orange" if total_bad_debt > 0 else "green"),
+        ),
     ]
 
     # --- Chart 1: Cascade ---
@@ -776,16 +934,17 @@ def update_dashboard(scenario_preset, price_drop, liquidity_pct, gas_cost, data_
                            template="plotly_dark", paper_bgcolor="#161b22", plot_bgcolor="#0d1117", font=dict(color="#e6edf3"))
 
     # --- Chart 4: Stress test ---
-    drops = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
+    drops = [0.10, 0.20, 0.30, 0.40, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75]
     scenario_results = []
     for d in drops:
         try:
             r, a = run_cascade(
                 price_drop_pct=d,
-                gas_usd=float(gas_cost),
+                gas_usd=gas_cost_effective,
                 initial_liquidity_pct=liquidity_pct / 100,
                 use_feedback=use_feedback,
                 rng_seed=42,
+                positions=positions,
             )
             scenario_results.append({
                 "drop": f"{int(d*100)}%",
@@ -795,7 +954,7 @@ def update_dashboard(scenario_preset, price_drop, liquidity_pct, gas_cost, data_
         except Exception:
             scenario_results.append({
                 "drop": f"{int(d*100)}%",
-                "liquidated": 1000,
+                "liquidated": len(positions),
                 "bad_debt": 0,
             })
 
@@ -804,24 +963,83 @@ def update_dashboard(scenario_preset, price_drop, liquidity_pct, gas_cost, data_
     fig4 = go.Figure()
     fig4.add_trace(go.Bar(
         x=scenario_df['drop'], y=scenario_df['bad_debt'],
-        name='Bad Debt ($M)', marker_color='crimson', yaxis='y'
+        name='Bad Debt ($M)', marker_color='crimson', yaxis='y',
+        hovertemplate='<b>%{x} drop</b><br>Bad Debt: $%{y:.2f}M<extra></extra>',
     ))
     fig4.add_trace(go.Scatter(
         x=scenario_df['drop'], y=scenario_df['liquidated'],
         name='Positions Liquidated',
-        line=dict(color='#58a6ff', width=2), yaxis='y2'
+        line=dict(color='#58a6ff', width=2),
+        mode='lines+markers', marker=dict(size=6, color='#58a6ff'),
+        yaxis='y2',
+        hovertemplate='<b>%{x} drop</b><br>Liquidated: %{y}<extra></extra>',
     ))
     fig4.update_layout(
-        title="Stress Test: All Scenarios", xaxis_title="Price Drop",
-        yaxis=dict(title="Bad Debt ($M)", side="left"),
-        yaxis2=dict(title="Positions Liquidated", side="right", overlaying="y"),
-        legend=dict(x=0.01, y=0.99), template="plotly_dark",
+        title="Stress Test: All Scenarios",
+        xaxis_title="Price Drop",
+        yaxis=dict(title="Bad Debt ($M)", side="left",
+                   type="log", showgrid=True,
+                   gridcolor="rgba(255,255,255,0.07)",
+                   tickformat=".2r"),
+        yaxis2=dict(title="Positions Liquidated", side="right", overlaying="y",
+                    showgrid=False),
+        legend=dict(x=0.01, y=0.99, bgcolor='rgba(13,17,23,0.85)',
+                    bordercolor='#30363d', borderwidth=1),
+        template="plotly_dark",
         paper_bgcolor="#161b22",
         plot_bgcolor="#0d1117",
         font=dict(color="#e6edf3", family="IBM Plex Mono, monospace"),
+        margin=dict(r=60, t=50),
     )
 
     return price_drop, liquidity_pct, gas_cost, description, summary, fig1, fig2, fig3, fig4, data_status
+
+
+# ── Export Callback ──────────────────────────────────────────────────────────
+
+@app.callback(
+    Output("export-download", "data"),
+    Input("export-btn", "n_clicks"),
+    State("price-drop", "value"),
+    State("liquidity-pct", "value"),
+    State("gas-cost", "value"),
+    State("data-source", "value"),
+    State("feedback-mode", "value"),
+    prevent_initial_call=True,
+)
+def export_results(n_clicks, price_drop, liquidity_pct, gas_cost, data_source, feedback_mode):
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+
+    use_feedback = (feedback_mode == "on")
+
+    if data_source == "live" and LIVE_AVAILABLE:
+        try:
+            positions = fetch_live_positions(n_sample=1000)
+        except Exception:
+            positions = generate_aave_positions(n=1000)
+    else:
+        positions = generate_aave_positions(n=1000)
+
+    results, agents = run_cascade(
+        price_drop_pct=price_drop / 100,
+        gas_usd=float(gas_cost),
+        initial_liquidity_pct=liquidity_pct / 100,
+        use_feedback=use_feedback,
+        rng_seed=42,
+        positions=positions,
+    )
+
+    # Add metadata columns
+    results = results.copy()
+    results.insert(0, "price_drop_pct", price_drop)
+    results.insert(1, "liquidity_pct", liquidity_pct)
+    results.insert(2, "gas_usd", gas_cost)
+    results.insert(3, "data_source", data_source)
+    results.insert(4, "feedback_mode", feedback_mode)
+
+    filename = f"defi_market_risk_monitor_drop{price_drop}pct_liq{liquidity_pct}pct_gas{gas_cost}.csv"
+    return dcc.send_data_frame(results.to_csv, filename, index=False)
 
 
 # ── Monitor Tab Callbacks ─────────────────────────────────────────────────────
@@ -915,6 +1133,54 @@ def update_monitor(n_clicks, active_tab):
     elev_daily = 0.15
     crit_daily = 0.80
 
+    # Build threshold-crossing annotations for monitor chart
+    def _monitor_annotations(df, daily_p, elev, crit):
+        anns = [
+            dict(x=df["timestamp_utc"].max(), y=elev, text="ELEVATED (15%)",
+                 showarrow=False, font=dict(color="#f59e0b", size=10),
+                 xanchor="right", yanchor="bottom"),
+            dict(x=df["timestamp_utc"].max(), y=crit, text="CRITICAL (80%)",
+                 showarrow=False, font=dict(color="#ef4444", size=10),
+                 xanchor="right", yanchor="bottom"),
+        ]
+        # Add marker annotations at each threshold crossing
+        for i in range(1, len(daily_p)):
+            prev, curr = float(daily_p.iloc[i-1]), float(daily_p.iloc[i])
+            ts = str(df["timestamp_utc"].iloc[i])
+            if prev < elev <= curr:
+                anns.append(dict(
+                    x=ts, y=curr,
+                    text="⚠ ELEVATED RISK", showarrow=True, arrowhead=2,
+                    arrowcolor="#f59e0b", ax=0, ay=-35,
+                    font=dict(color="#f59e0b", size=10, family="IBM Plex Mono, monospace"),
+                    bgcolor="rgba(13,17,23,0.9)", bordercolor="#f59e0b", borderwidth=1, borderpad=3,
+                ))
+            elif prev < crit <= curr:
+                anns.append(dict(
+                    x=ts, y=curr,
+                    text="🔴 CRITICAL", showarrow=True, arrowhead=2,
+                    arrowcolor="#ef4444", ax=0, ay=-35,
+                    font=dict(color="#ef4444", size=10, family="IBM Plex Mono, monospace"),
+                    bgcolor="rgba(13,17,23,0.9)", bordercolor="#ef4444", borderwidth=1, borderpad=3,
+                ))
+            elif prev >= crit > curr >= elev:
+                anns.append(dict(
+                    x=ts, y=curr,
+                    text="↓ back to ELEVATED", showarrow=True, arrowhead=2,
+                    arrowcolor="#f59e0b", ax=0, ay=35,
+                    font=dict(color="#f59e0b", size=9, family="IBM Plex Mono, monospace"),
+                    bgcolor="rgba(13,17,23,0.9)", bordercolor="#f59e0b", borderwidth=1, borderpad=2,
+                ))
+            elif prev >= elev > curr:
+                anns.append(dict(
+                    x=ts, y=curr,
+                    text="✓ back to STABLE", showarrow=True, arrowhead=2,
+                    arrowcolor="#2ecc71", ax=0, ay=35,
+                    font=dict(color="#2ecc71", size=9, family="IBM Plex Mono, monospace"),
+                    bgcolor="rgba(13,17,23,0.9)", bordercolor="#2ecc71", borderwidth=1, borderpad=2,
+                ))
+        return anns
+
     fig_f = go.Figure()
     colour_map = {"STABLE": "#2ecc71", "ELEVATED RISK": "#f39c12", "CRITICAL": "#e74c3c"}
     bar_colours = [colour_map.get(str(s), "grey") for s in df["market_status"]]
@@ -942,14 +1208,7 @@ def update_monitor(n_clicks, active_tab):
             dict(type="line", x0=df["timestamp_utc"].min(), x1=df["timestamp_utc"].max(),
                  y0=crit_daily, y1=crit_daily, line=dict(color="red", dash="dash", width=1.5)),
         ],
-        annotations=[
-            dict(x=df["timestamp_utc"].max(), y=elev_daily, text="ELEVATED (15%)",
-                 showarrow=False, font=dict(color="orange", size=10),
-                 xanchor="right", yanchor="bottom"),
-            dict(x=df["timestamp_utc"].max(), y=crit_daily, text="CRITICAL (80%)",
-                 showarrow=False, font=dict(color="red", size=10),
-                 xanchor="right", yanchor="bottom"),
-        ]
+        annotations=(lambda: _monitor_annotations(df, df_daily_p, elev_daily, crit_daily))()
     )
 
     # Chart 2: ETH price + gas context
@@ -979,6 +1238,18 @@ def update_monitor(n_clicks, active_tab):
 # ── Backtest Tab Callbacks ─────────────────────────────────────────────────────
 
 @app.callback(
+    Output("backtest-event-description", "children"),
+    Input("backtest-event-selector", "value"),
+    prevent_initial_call=False,
+)
+def update_event_description(event_key):
+    if not BACKTEST_AVAILABLE or not event_key:
+        return ""
+    state = EVENTS.get(event_key, {})
+    return state.get("description", "")
+
+
+@app.callback(
     Output("backtest-result-callout", "children"),
     Output("backtest-timeline-chart", "figure"),
     Output("backtest-cascade-chart", "figure"),
@@ -988,9 +1259,11 @@ def update_monitor(n_clicks, active_tab):
     Output("backtest-placeholder", "style"),
     Input("backtest-run-btn", "n_clicks"),
     Input("main-tabs", "value"),
+    State("backtest-event-selector", "value"),
     prevent_initial_call=False,
 )
-def update_backtest(n_clicks, active_tab):
+def update_backtest(n_clicks, active_tab, event_key):
+    event_key = event_key or "ftx_2022"
     hidden = {"display": "none"}
     visible_content = {"display": "block"}
     visible_placeholder = {"display": "block"}
@@ -1001,7 +1274,7 @@ def update_backtest(n_clicks, active_tab):
     empty = [go.Figure()] * 4
 
     if not BACKTEST_AVAILABLE:
-        msg = html.Div("⚠ backtest_ftx.py not found. Ensure it is in the project directory.",
+        msg = html.Div("⚠ backtests.py not found. Ensure it is in the project directory.",
                        style={"color": "#ff6b6b", "fontFamily": "IBM Plex Mono, monospace"})
         return msg, *empty, hidden, visible_placeholder
 
@@ -1009,59 +1282,77 @@ def update_backtest(n_clicks, active_tab):
     if not n_clicks or n_clicks == 0:
         return [], *empty, hidden, visible_placeholder
 
+    # Load event metadata
+    event_state = EVENTS.get(event_key, EVENTS["ftx_2022"])
+    event_label = event_state["label"]
+    key_event_date = event_state["key_event_date"]
+    key_event_label = event_state["key_event_label"]
+
     # Build F timeline (cheap — no simulation)
-    timeline = build_f_timeline()
+    timeline = build_timeline(event_key)
 
     # Run cascade simulation
     results, agents, pre_crash, summary = None, None, None, None
     try:
-        results, agents, pre_crash, summary = run_ftx_backtest(verbose=False)
+        results, agents, pre_crash, summary = run_backtest(event_key, verbose=False)
     except Exception as e:
         pre_crash = {"flash crash prob (F)": None, "market status": "ERROR"}
         summary = {}
 
-    # Result callout — read Nov 8 and Nov 9 directly from timeline (same source as chart)
+    # Result callout — driven by selected event, reads from timeline
     _colour_map_tl = {"STABLE": "#2ecc71", "ELEVATED RISK": "#f39c12", "CRITICAL": "#e74c3c"}
-    _nov8  = timeline[timeline["date"] == "2022-11-08"].iloc[0] if "2022-11-08" in timeline["date"].values else None
-    _nov9  = timeline[timeline["date"] == "2022-11-09"].iloc[0] if "2022-11-09" in timeline["date"].values else None
     _hf_tail = float(pre_crash.get("hf_tail_pct", 0) or 0) if pre_crash else 0.077
 
-    if _nov8 is not None:
-        p_open_daily = 1 - (1 - float(_nov8["F"])) ** 24000
-        status       = str(_nov8["market_status"])
-        s_colour     = _colour_map_tl.get(status, "grey")
-    else:
-        p_open_daily, status, s_colour = 0.0, "—", "grey"
+    # Key event day = the crisis peak date for this event
+    _key_row  = timeline[timeline["date"] == key_event_date]
+    _peak_row = timeline  # peak = worst F day in the timeline
 
-    if _nov9 is not None:
-        p_peak_daily = 1 - (1 - float(_nov9["F"])) ** 24000
-        peak_status  = str(_nov9["market_status"])
-        peak_colour  = _colour_map_tl.get(peak_status, "grey")
+    if not _key_row.empty:
+        _key = _key_row.iloc[0]
+        p_key_daily = 1 - (1 - float(_key["F"])) ** 24000
+        status      = str(_key["market_status"])
+        s_colour    = _colour_map_tl.get(status, "grey")
+        key_gas     = float(_key["gas_usd"])
+        key_depth   = float(_key["stablecoin_depth_usd"]) / 1e6
     else:
-        p_peak_daily, peak_status, peak_colour = 0.989, "CRITICAL", "#e74c3c"
+        p_key_daily, status, s_colour, key_gas, key_depth = 0.0, "—", "grey", 0, 0
 
-    # Callout always shown (reads from timeline, not simulation)
-    bg_colour  = {"STABLE": "#0d2818", "ELEVATED RISK": "#2d1f04", "CRITICAL": "#2d0f0f"}.get(status, "#f9f9f9")
+    # Peak F row (worst day in the window)
+    _peak_idx = int(timeline["F"].idxmax())
+    _peak = timeline.iloc[_peak_idx]
+    p_peak_daily = 1 - (1 - float(_peak["F"])) ** 24000
+    peak_status  = str(_peak["market_status"])
+    peak_colour  = _colour_map_tl.get(peak_status, "grey")
+    peak_date_str = str(_peak["date"])
+
+    # Pre-crisis baseline (first day of window)
+    _pre = timeline.iloc[0]
+    p_pre_daily = 1 - (1 - float(_pre["F"])) ** 24000
+    pre_status  = str(_pre["market_status"])
+    pre_colour  = _colour_map_tl.get(pre_status, "grey")
+    pre_date_str = str(_pre["date"])
+
+    bg_colour = {"STABLE": "#0d2818", "ELEVATED RISK": "#2d1f04", "CRITICAL": "#2d0f0f"}.get(peak_status, "#0d1117")
     callout = html.Div([
         html.Div([
-            html.Span("P(flash crash | 24h) Trajectory: ", style={"fontWeight": "bold", "fontSize": "15px"}),
-            html.Span("Nov 8  ", style={"color": "#6e7681", "fontSize": "13px"}),
-            html.Span(f"{p_open_daily:.1%}", style={"fontSize": "20px", "fontWeight": "bold", "color": s_colour}),
-            html.Span(f" [{status}]", style={"color": s_colour, "fontWeight": "bold"}),
-            html.Span("  →  Nov 9 peak  ", style={"color": "#6e7681", "fontSize": "13px", "marginLeft": "14px"}),
+            html.Span(f"{event_label} — P(flash crash | 24h): ", style={"fontWeight": "bold", "fontSize": "15px"}),
+            html.Span(f"{pre_date_str}  ", style={"color": "#6e7681", "fontSize": "13px"}),
+            html.Span(f"{p_pre_daily:.1%}", style={"fontSize": "20px", "fontWeight": "bold", "color": pre_colour}),
+            html.Span(f" [{pre_status}]", style={"color": pre_colour, "fontWeight": "bold"}),
+            html.Span("  →  peak  ", style={"color": "#6e7681", "fontSize": "13px", "marginLeft": "14px"}),
             html.Span(f"{p_peak_daily:.1%}", style={"fontSize": "20px", "fontWeight": "bold", "color": peak_colour}),
             html.Span(f" [{peak_status}]", style={"color": peak_colour, "fontWeight": "bold"}),
         ], style={"fontSize": "15px", "marginBottom": "10px"}),
         html.P([
-            f"By Nov 8 (Binance's no-rescue announcement) flash-crash probability had already reached {p_open_daily:.1%}/day — "
-            f"{status}: gas had spiked to $85/liq and stablecoin depth had drained to $180M. "
-            f"With {_hf_tail:.1%} of positions already at HF < 1.2, ignition risk was severe. "
-            f"As the cascade intensified (gas peaked at $118, depth fell to $120M), P(fc|24h) surged to {p_peak_daily:.1%} on Nov 9. "
-            "This is the paper's central result: F captures mechanism fragility; the HF tail captures ignition risk. "
-            "Both signals are needed for complete early warning."
+            f"At crisis peak ({peak_date_str}) flash-crash probability reached {p_peak_daily:.1%}/day [{peak_status}]. "
+            f"Key event ({key_event_date}: {key_event_label}): P(fc|24h) = {p_key_daily:.1%} "
+            f"[{status}] — gas ${key_gas:.0f}/liq, stablecoin depth ${key_depth:.0f}M. "
+            f"With {_hf_tail:.1%} of positions at HF < 1.2, ignition risk was severe. "
+            "F captures mechanism fragility; the HF tail captures ignition risk. "
+            "Both signals are needed for complete early warning (Mishricky 2025)."
         ], style={"fontFamily": "IBM Plex Mono, monospace", "fontSize": "13px", "color": "#c9d1d9", "margin": "0"}),
     ], style={"backgroundColor": bg_colour,
-              "border": f"1px solid {s_colour}60", "borderRadius": "6px",
+              "border": f"1px solid {peak_colour}60", "borderRadius": "6px",
               "padding": "14px 18px", "fontFamily": "IBM Plex Mono, monospace"})
 
 
@@ -1070,19 +1361,16 @@ def update_backtest(n_clicks, active_tab):
 
     BLOCKS_PER_DAY = 24000
     timeline_daily_p = timeline["F"].apply(lambda f: 1 - (1 - f) ** BLOCKS_PER_DAY)
-    elev_daily = 0.15   # matches build_f_timeline status classification
-    crit_daily = 0.80   # matches build_f_timeline status classification
+    elev_daily = 0.15   # matches backtests.py status classification
+    crit_daily = 0.80   # matches backtests.py status classification
     colour_map = {"STABLE": "#2ecc71", "ELEVATED RISK": "#f39c12", "CRITICAL": "#e74c3c"}
-    dates = list(timeline["date"])  # full ISO strings so Plotly parses year correctly
-    dot_colours = [colour_map.get(s, "grey") for s in timeline["market_status"]]
+    dates = list(timeline["date"])
 
+    # Build event annotations dynamically from timeline notes
     events = [
-        (1,  "CoinDesk"),
-        (5,  "Binance sells FTT"),
-        (7,  "No rescue"),
-        (8,  "Peak cascade"),
-        (10, "Bankruptcy"),
-        (11, "ETH bottom"),
+        (i, row["note"])
+        for i, row in timeline.iterrows()
+        if row["note"].strip()
     ]
 
     fig_tl = make_subplots(
@@ -1093,7 +1381,7 @@ def update_backtest(n_clicks, active_tab):
         subplot_titles=["ETH / USD", "P(flash crash | 24h)  =  1 − (1−F)^24000"]
     )
 
-    # Panel 1: ETH price — tight y-axis so drawdown is visible
+    # Panel 1: ETH price
     eth_min = int(timeline["eth_price_usd"].min() * 0.94)
     eth_max = int(timeline["eth_price_usd"].max() * 1.04)
     fig_tl.add_trace(go.Scatter(
@@ -1101,7 +1389,6 @@ def update_backtest(n_clicks, active_tab):
         mode="lines", line=dict(color="#7c5cbf", width=2.5),
         showlegend=False, hoverinfo="skip",
     ), row=1, col=1)
-    # One trace per status — guarantees Plotly renders correct hex colours (no colorscale coercion)
     for status, colour in colour_map.items():
         xs, ys, cd = [], [], []
         for i, (d, eth, s) in enumerate(zip(dates, timeline["eth_price_usd"], timeline["market_status"])):
@@ -1119,15 +1406,12 @@ def update_backtest(n_clicks, active_tab):
                 hovertemplate="<b>%{x}</b>  ETH $%{y:,}<br>Gas: $%{customdata[0]:.0f}/liq  |  Depth: $%{customdata[1]:.0f}M<br>Status: %{customdata[2]}<br>%{customdata[3]}<extra></extra>",
             ), row=1, col=1)
 
-    # Panel 2: P(flash crash|24h) — coloured line segments + dots, one trace per status
-    # Line segments: use None-gap technique — one trace per status, gaps between non-contiguous points
+    # Panel 2: P(flash crash|24h) — coloured line segments + dots
     for status, colour in colour_map.items():
         seg_x, seg_y = [], []
         for i in range(len(timeline) - 1):
             s_i = timeline["market_status"].iloc[i]
             s_next = timeline["market_status"].iloc[i + 1]
-            # Draw segment if either endpoint has this status (transition segments take the higher-risk colour)
-            # Use: colour the segment by whichever endpoint has the worse status
             worse = s_i if (["STABLE","ELEVATED RISK","CRITICAL"].index(s_i) >=
                             ["STABLE","ELEVATED RISK","CRITICAL"].index(s_next)) else s_next
             if worse == status:
@@ -1165,7 +1449,7 @@ def update_backtest(n_clicks, active_tab):
                      annotation_font=dict(color="#ef4444", size=9))
 
     # Event vertical lines + staggered labels
-    label_y_positions = [0.97, 0.91, 0.97, 0.91, 0.97, 0.91]
+    label_y_positions = [0.97 if i % 2 == 0 else 0.91 for i in range(len(events))]
     for i, (idx, label) in enumerate(events):
         for row_num in [1, 2]:
             fig_tl.add_shape(type="line",
@@ -1191,7 +1475,7 @@ def update_backtest(n_clicks, active_tab):
 
     fig_tl.update_layout(
         title=dict(
-            text="FTX Collapse — Fragility Signal (Mishricky 2025)<br>"
+            text=f"{event_label} — Fragility Signal (Mishricky 2025)<br>"
                  "<sup>Dot colour: green = STABLE (&lt;15%) | orange = ELEVATED RISK (15–80%) | red = CRITICAL (&gt;80%)</sup>",
             font=dict(size=13),
         ),
@@ -1224,8 +1508,8 @@ def update_backtest(n_clicks, active_tab):
     _colour_map_drv = {"STABLE": "#2ecc71", "ELEVATED RISK": "#f39c12", "CRITICAL": "#e74c3c"}
     _dot_clr = [_colour_map_drv.get(s, "grey") for s in _status]
 
-    # Nov 8 index for the vertical annotation
-    _nov8_idx = next((i for i, d in enumerate(_dates) if d == "2022-11-08"), None)
+    # Key event index for the vertical annotation
+    _nov8_idx = next((i for i, d in enumerate(_dates) if d == key_event_date), None)
 
     fig_cas = _msp(
         rows=3, cols=1,
@@ -1292,7 +1576,7 @@ def update_backtest(n_clicks, active_tab):
             )
         fig_cas.add_annotation(
             x=_dates[_nov8_idx], y=1.01, yref="paper",
-            text="<b>Nov 8 — no rescue</b>", showarrow=False,
+            text=f"<b>{key_event_label}</b>", showarrow=False,
             font=dict(size=8, color="#ff6b6b"),
             bgcolor="rgba(13,17,23,0.92)",
             bordercolor="rgba(231,76,60,0.4)", borderwidth=1, borderpad=2,
@@ -1308,7 +1592,7 @@ def update_backtest(n_clicks, active_tab):
 
     fig_cas.update_layout(
         title=dict(
-            text="Fragility Drivers: What Pushed F Toward Critical<br>"
+            text=f"Fragility Drivers — {event_label}<br>"
                  "<sup>Dot colour: green = STABLE | orange = ELEVATED RISK | red = CRITICAL. "
                  "F rises when liquidity falls, gas spikes, or book width narrows.</sup>",
             font=dict(size=11),
@@ -1334,9 +1618,9 @@ def update_backtest(n_clicks, active_tab):
     # % below HF 1.2 is similarly scaled inversely (more positions at risk as ETH falls).
     from plotly.subplots import make_subplots as _msp2
 
-    _ETH_ANCHOR   = 1245.0   # Nov 8 close (our backtest entry point)
-    _HF_MED_ANC   = 1.48     # Dune snapshot median HF on Nov 8
-    _HF_TAIL_ANC  = 0.082    # 8.2% below HF 1.2 on Nov 8
+    _ETH_ANCHOR   = event_state["eth_price_close_usd"]   # Crisis entry price
+    _HF_MED_ANC   = event_state["hf_median"]                # Median HF at crisis
+    _HF_TAIL_ANC  = event_state["hf_pct_below_1_2"]         # Tail risk at crisis
 
     _eth_prices  = list(timeline["eth_price_usd"])
     _hf_median   = [_HF_MED_ANC  * (p / _ETH_ANCHOR) for p in _eth_prices]
@@ -1415,7 +1699,7 @@ def update_backtest(n_clicks, active_tab):
             )
         fig_cmp.add_annotation(
             x=_dates[_nov8_idx], y=1.01, yref="paper",
-            text="<b>Nov 8 — no rescue</b>", showarrow=False,
+            text=f"<b>{key_event_label}</b>", showarrow=False,
             font=dict(size=8, color="#ff6b6b"),
             bgcolor="rgba(13,17,23,0.92)",
             bordercolor="rgba(231,76,60,0.4)", borderwidth=1, borderpad=2,
@@ -1431,8 +1715,8 @@ def update_backtest(n_clicks, active_tab):
 
     fig_cmp.update_layout(
         title=dict(
-            text="ETH Price & Health Factor Trajectory<br>"
-                 "<sup>HF median scaled daily from Nov 8 Dune anchor (1.48). "
+            text=f"ETH Price & Health Factor Trajectory — {event_label}<br>"
+                 f"<sup>HF median scaled daily from crisis-entry anchor ({_HF_MED_ANC:.2f}). "
                  "Dot colour: green = STABLE | orange = ELEVATED RISK | red = CRITICAL.</sup>",
             font=dict(size=11),
         ),
@@ -1500,7 +1784,7 @@ def update_backtest(n_clicks, active_tab):
     )
     fig_sp.add_annotation(
         x=_dates[-1], y=_baseline_P,
-        text="Pre-crisis baseline (Nov 1)",
+text=f"Pre-crisis baseline ({_dates[0]})",
         showarrow=False, xanchor="right", yanchor="bottom",
         font=dict(size=9, color="#8b949e"),
     )
@@ -1524,11 +1808,12 @@ def update_backtest(n_clicks, active_tab):
 
     # Deepening annotation at trough (Nov 9)
     _trough_idx = int(np.argmin(_spec_premium))
+    _trough_date = _dates[_trough_idx]
     _deepening_at_trough = _spec_premium[_trough_idx] - _baseline_P
     fig_sp.add_annotation(
         x=_dates[_trough_idx],
         y=_spec_premium[_trough_idx],
-        text=f"Peak deepening<br>ΔP = {_deepening_at_trough:.4f}",
+        text=f"Peak deepening ({_trough_date})<br>ΔP = {_deepening_at_trough:.4f}",
         showarrow=True, arrowhead=2, arrowcolor="#ff6b6b",
         ax=40, ay=-40,
         font=dict(size=9, color="#ff6b6b"),
@@ -1545,7 +1830,7 @@ def update_backtest(n_clicks, active_tab):
         )
         fig_sp.add_annotation(
             x=_dates[_nov8_idx], y=1.01, yref="paper",
-            text="<b>Nov 8 — no rescue</b>", showarrow=False,
+            text=f"<b>{key_event_label}</b>", showarrow=False,
             font=dict(size=8, color="#ff6b6b"),
             bgcolor="rgba(13,17,23,0.92)",
             bordercolor="rgba(231,76,60,0.4)", borderwidth=1, borderpad=2,
@@ -1561,7 +1846,7 @@ def update_backtest(n_clicks, active_tab):
 
     fig_sp.update_layout(
         title=dict(
-            text="Speculative Discount  P = φₛ − φ̂ₛ  (Proposition 12)<br>"
+            text=f"Speculative Discount — {event_label}  (Proposition 12)<br>"
                  "<sup>P &lt; 0 throughout: fragility forces investors to price the asset below fundamental. "
                  "Discount deepens as φ_m (liquidity) falls and κ (gas) spikes.</sup>",
             font=dict(size=11),

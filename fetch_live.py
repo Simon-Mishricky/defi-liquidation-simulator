@@ -109,9 +109,12 @@ def fetch_live_positions(n_sample: int = 1000) -> pd.DataFrame:
         )
         debt_vals = np.clip(debt_vals, 100, avg_debt * 200)
 
-        # Draw health factors: most positions healthy (HF 1.1–3.0), tail near liquidation
-        hf_vals = rng.lognormal(mean=np.log(1.5), sigma=0.4, size=n)
-        hf_vals = np.clip(hf_vals, 0.95, 10.0)
+        # Draw health factors calibrated to Aave V3 risk dashboard:
+        # lognormal(0.8, 0.3) → median HF ≈ 2.23, P(HF<1.0) ≈ 0.4%, P(HF<1.2) ≈ 2%
+        # Clip at 1.01 — sub-1.0 positions are cleared by bots continuously in
+        # the real protocol and should not appear in a realistic snapshot.
+        hf_vals = rng.lognormal(mean=0.8, sigma=0.3, size=n)
+        hf_vals = np.clip(hf_vals, 1.01, 10.0)
 
         # Collateral implied by HF: collateral * lt / debt = hf
         collateral_vals = (hf_vals * debt_vals) / lt

@@ -8,7 +8,7 @@ from theory import calibrate_from_positions
 
 def run_cascade(price_drop_pct, n_positions=1000, price_impact_factor=0.000000001,
                 gas_usd=80.0, initial_liquidity_pct=0.40, daily_volatility=0.05,
-                use_feedback=True, rng_seed=None):
+                use_feedback=True, rng_seed=None, positions=None):
     """
     Run a liquidation cascade with optional endogenous bot participation feedback.
 
@@ -35,11 +35,18 @@ def run_cascade(price_drop_pct, n_positions=1000, price_impact_factor=0.00000000
 
     rng = np.random.default_rng(rng_seed)
 
-    positions = generate_aave_positions(n=n_positions)
-    agents = [
-        BorrowerAgent(i, row.collateral_usd, row.debt_usd)
-        for i, row in positions.iterrows()
-    ]
+    if positions is None:
+        positions = generate_aave_positions(n=n_positions)
+    agents = []
+    for i, row in positions.iterrows():
+        # Use per-position liquidation_threshold and liq_bonus if available
+        # (live data has per-reserve values; synthetic defaults to 0.825/0.05)
+        lt = getattr(row, 'liquidation_threshold', 0.825)
+        lb = getattr(row, 'liq_bonus', 0.05)
+        agents.append(
+            BorrowerAgent(i, row.collateral_usd, row.debt_usd,
+                          liq_threshold=lt, liq_bonus=lb)
+        )
 
     total_debt_initial = positions['debt_usd'].sum()
     available_liquidity = total_debt_initial * initial_liquidity_pct
@@ -87,10 +94,11 @@ def run_cascade(price_drop_pct, n_positions=1000, price_impact_factor=0.00000000
         round_liquidation_volume = 0
         round_bad_debt = 0
 
-        # Bad debt accrues on skipped positions that are already insolvent
-        for agent in skipped:
-            if agent.debt > agent.collateral:
-                round_bad_debt += agent.debt - agent.collateral
+        # Skipped positions remain underwater but bad debt is NOT recognised yet —
+        # it only crystallises when a position is actually processed (executed).
+        # This matches the theoretical model: F elevated means bots don't quote,
+        # positions stay on-book unresolved. The protocol has latent exposure but
+        # has not yet formally absorbed the loss. Bad debt is a lagging indicator.
 
         for agent in executing:
             debt_to_repay = agent.debt * 0.5

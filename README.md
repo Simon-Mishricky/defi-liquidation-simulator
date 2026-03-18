@@ -15,16 +15,22 @@ What makes it different from other liquidation risk tools is the integration of 
 ## Dashboard
 
 ### Simulator
+
+The simulator stress-tests a lending pool under configurable crisis conditions. Set a collateral price drop, stablecoin liquidity depth, and gas cost per liquidation, then watch the cascade unfold round by round. Four presets model distinct failure modes: a baseline scenario, a liquidity drain, a gas-driven posting cost shock, and a combined collapse. The stat bar shows the dimensionless theory parameters (φᵐ, κ) alongside cascade outcomes, with full-scale equivalents for the ~45,000-borrower Aave V3 market.
+
 ![Simulator demo](docs/demo_simulator.gif)
-*Cycles through four crisis presets — Normal → Gas Spike → Liquidity Crisis → Combined Shock — showing how the cascade, θ/F trajectory, bid/ask distributions, and stress test surface respond to each scenario in real time.*
 
 ### Live F Monitor
+
+The monitor computes F in real time from three public APIs (no keys required): ETH price from CoinGecko, gas from Etherscan, and stablecoin depth from the Aave V3 endpoint. Each hourly snapshot is logged to `f_monitor_log.csv` and plotted as a time series. The signal is forward-looking — F rises when gas spikes, depth drains, or utilisation increases, before bad debt materialises on-chain.
+
 ![Live F Monitor demo](docs/demo_live_monitor.gif)
-*Simulated 48-hour monitoring window. F is computed hourly from on-chain conditions (ETH price, gas, stablecoin depth) and logged to CSV. Shows a gas-driven spike pushing F into ELEVATED RISK before recovering.*
 
 ### Crisis Backtests
+
+The backtest tab reconstructs on-chain pool conditions for each major DeFi crisis using sourced daily data (DeFiLlama, Etherscan, CoinGecko, Dune Analytics). For each event it builds a 15-day F timeline and runs the full cascade simulation against the reconstructed pool. The key test: did F signal ELEVATED RISK or CRITICAL before bad debt appeared?
+
 ![Crisis Backtests demo](docs/demo_backtests.gif)
-*Cycles through three historical crises — FTX Collapse, Black Thursday, USDC Depeg — showing the daily F timeline, θ evolution, ETH price context, and speculative discount trajectory for each event.*
 
 | Event | Period | Protocol | Peak P(fc\|24h) |
 |---|---|---|---|
